@@ -1,12 +1,10 @@
 import streamlit as st
 import speech_recognition as sr
-import os
 from datetime import datetime
 
 # Title
 st.title("🎙️ Speech Recognition App")
 
-# Sidebar settings
 st.sidebar.header("Settings")
 
 api_choice = st.sidebar.selectbox(
@@ -22,9 +20,6 @@ language = st.sidebar.selectbox(
 pause_recognition = st.sidebar.checkbox("Pause Recognition")
 
 recognizer = sr.Recognizer()
-
-# Detect if we are running on Streamlit Cloud (no microphone available)
-running_in_cloud = os.environ.get("STREAMLIT_RUNTIME") is not None
 
 
 def transcribe_audio_file(file, api_choice, language):
@@ -48,58 +43,21 @@ def transcribe_audio_file(file, api_choice, language):
         return f"❌ Error: {str(e)}"
 
 
-def transcribe_microphone(api_choice, language):
-    try:
-        mic = sr.Microphone()
-        with mic as source:
-            st.info("Adjusting for ambient noise... Please wait")
-            recognizer.adjust_for_ambient_noise(source)
-            st.success("Start speaking 🎤 (Recording...)")
-            audio = recognizer.listen(source)
-
-        if api_choice == "Google":
-            return recognizer.recognize_google(audio, language=language)
-        elif api_choice == "Sphinx":
-            return recognizer.recognize_sphinx(audio, language=language)
-        else:
-            return "❌ API not supported."
-
-    except sr.UnknownValueError:
-        return "⚠️ Could not understand the speech."
-    except sr.RequestError as e:
-        return f"❌ API request error: {e}"
-    except Exception as e:
-        return f"❌ Error: {str(e)}"
-
+# 🔥 Always use file upload (no microphone) in Streamlit Cloud
+st.warning("🎤 Microphone is not supported on Streamlit Cloud. Please upload an audio file.")
 
 if not pause_recognition:
-    if running_in_cloud:
-        st.warning("🎤 Microphone input is not available in Streamlit Cloud. Please upload an audio file.")
+    uploaded_file = st.file_uploader("Upload an audio file", type=["wav", "mp3"])
+    if uploaded_file is not None:
+        text = transcribe_audio_file(uploaded_file, api_choice, language)
+        st.subheader("Transcription Result")
+        st.write(text)
 
-        uploaded_file = st.file_uploader("Upload an audio file", type=["wav", "mp3"])
-        if uploaded_file is not None:
-            text = transcribe_audio_file(uploaded_file, api_choice, language)
-            st.subheader("Transcription Result")
-            st.write(text)
-
-            if "❌" not in text and "⚠️" not in text:
-                filename = f"transcription_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-                with open(filename, "w", encoding="utf-8") as f:
-                    f.write(text)
-                with open(filename, "r", encoding="utf-8") as f:
-                    st.download_button("Download Transcription", f, file_name=filename)
-
-    else:
-        if st.button("Start Transcription"):
-            text = transcribe_microphone(api_choice, language)
-            st.subheader("Transcription Result")
-            st.write(text)
-
-            if "❌" not in text and "⚠️" not in text:
-                filename = f"transcription_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-                with open(filename, "w", encoding="utf-8") as f:
-                    f.write(text)
-                with open(filename, "r", encoding="utf-8") as f:
-                    st.download_button("Download Transcription", f, file_name=filename)
+        if "❌" not in text and "⚠️" not in text:
+            filename = f"transcription_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(text)
+            with open(filename, "r", encoding="utf-8") as f:
+                st.download_button("Download Transcription", f, file_name=filename)
 else:
     st.warning("Recognition paused ⏸️. Uncheck pause to continue.")
