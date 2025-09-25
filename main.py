@@ -1,77 +1,70 @@
 import streamlit as st
 import speech_recognition as sr
-import nltk
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-import string
+import os
+from datetime import datetime
 
-# Download required NLTK data
-nltk.download('punkt')
-nltk.download('stopwords')
-nltk.download('wordnet')
+# Title
+st.title("🎙️ Speech Recognition App (Improved)")
 
-# Initialize speech recognizer
+# Sidebar options
+st.sidebar.header("Settings")
+
+# API selection
+api_choice = st.sidebar.selectbox(
+    "Choose Speech Recognition API",
+    ["Google", "Sphinx"]
+)
+
+# Language selection (ISO codes)
+language = st.sidebar.selectbox(
+    "Select Language",
+    ["en-US", "en-GB", "fr-FR", "es-ES", "de-DE", "sw-KE"]
+)
+
+# Pause / Resume toggle
+pause_recognition = st.sidebar.checkbox("Pause Recognition")
+
+# Recognizer instance
 recognizer = sr.Recognizer()
+mic = sr.Microphone()
 
-# Preprocess text data (assumes a conversational dataset)
-def preprocess_text(text):
-    lemmatizer = WordNetLemmatizer()
-    stop_words = set(stopwords.words('english'))
-    tokens = word_tokenize(text.lower())
-    tokens = [lemmatizer.lemmatize(token) for token in tokens if token not in string.punctuation and token not in stop_words]
-    return tokens
+def transcribe_speech(api_choice, language):
+    try:
+        with mic as source:
+            st.info("Adjusting for ambient noise... Please wait")
+            recognizer.adjust_for_ambient_noise(source)
+            st.success("Start speaking 🎤 (Recording...)")
+            audio = recognizer.listen(source)
 
-# Simple chatbot response generation (rule-based)
-def chatbot_response(user_input):
-    processed_input = preprocess_text(user_input)
-    # Example rule-based responses (replace with your dataset logic)
-    greetings = ['hello', 'hi', 'hey']
-    if any(token in processed_input for token in greetings):
-        return "Hi! How can I help you today?"
-    elif 'weather' in processed_input:
-        return "I’m not connected to a weather API, but I can chat about sunny vibes!"
-    elif 'name' in processed_input:
-        return "I’m Grok, your friendly AI assistant!"
-    else:
-        return "Hmm, interesting! Can you tell me more?"
+        if api_choice == "Google":
+            return recognizer.recognize_google(audio, language=language)
 
-# Function to transcribe speech to text
-def transcribe_speech():
-    with sr.Microphone() as source:
-        st.write("Listening... Speak clearly!")
-        recognizer.adjust_for_ambient_noise(source)
-        try:
-            audio = recognizer.listen(source, timeout=5)
-            text = recognizer.recognize_google(audio)
-            st.write(f"Transcribed: {text}")
-            return text
-        except sr.WaitTimeoutError:
-            return "No speech detected. Please try again."
-        except sr.UnknownValueError:
-            return "Sorry, I couldn’t understand the audio."
-        except sr.RequestError:
-            return "Speech recognition service is unavailable."
+        elif api_choice == "Sphinx":
+            return recognizer.recognize_sphinx(audio, language=language)
 
-# Streamlit app
-def main():
-    st.title("Speech-Enabled Chatbot")
-    st.write("Type your message or click 'Speak' to use voice input.")
+        else:
+            return "❌ API not supported."
 
-    # Text input
-    user_text = st.text_input("Enter your message:")
-    if user_text:
-        response = chatbot_response(user_text)
-        st.write(f"*Chatbot:* {response}")
+    except sr.UnknownValueError:
+        return "⚠️ Could not understand audio. Please try again."
+    except sr.RequestError as e:
+        return f"❌ Could not request results from {api_choice} API; {e}"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
 
-    # Speech input
-    if st.button("Speak"):
-        with st.spinner("Processing speech..."):
-            transcribed_text = transcribe_speech()
-            st.write(f"*You said:* {transcribed_text}")
-            if not transcribed_text.startswith("Sorry") and not transcribed_text.startswith("No speech"):
-                response = chatbot_response(transcribed_text)
-                st.write(f"*Chatbot:* {response}")
+# Run transcription
+if not pause_recognition:
+    if st.button("Start Transcription"):
+        text = transcribe_speech(api_choice, language)
+        st.subheader("Transcription Result")
+        st.write(text)
 
-if __name__ == "_main_":
-    main()
+        # Save to file
+        if "❌" not in text and "⚠️" not in text:
+            filename = f"transcription_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(text)
+            with open(filename, "r", encoding="utf-8") as f:
+                st.download_button("Download Transcription", f, file_name=filename)
+else:
+    st.warning("Recognition paused ⏸️. Uncheck pause to continue.")
